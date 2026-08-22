@@ -133,7 +133,9 @@ deploy-tunnel:
 			&& cloudflared --config /tmp/homepage-tunnel.yml tunnel ingress validate \
 			&& sudo mv /tmp/homepage-tunnel.yml /etc/cloudflared/homepage.yml'
 	ssh $(PI_USER)@$(PI_HOST) 'sudo tee /etc/systemd/system/cloudflared-homepage.service >/dev/null' < deploy/cloudflared-homepage.service
-	ssh $(PI_USER)@$(PI_HOST) 'sudo systemctl daemon-reload && sudo systemctl restart cloudflared-homepage'
+	ssh $(PI_USER)@$(PI_HOST) 'sudo systemctl daemon-reload \
+		&& sudo systemctl enable cloudflared-homepage \
+		&& sudo systemctl restart cloudflared-homepage'
 
 clean: stop
 	rm -rf $(BIN_DIR)
