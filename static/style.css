@@ -1,0 +1,101 @@
+/* Dark by default: the image is dark, and a white page around it would frame
+   it like a slide in a lightbox. */
+
+:root {
+	--bg: #0b0e11;
+	--surface: #12161b;
+	--text: #e6e9ec;
+	--muted: #8d979f;
+	--accent: #82ffaf;
+	--border: #222a31;
+}
+
+*,
+*::before,
+*::after {
+	box-sizing: border-box;
+}
+
+body {
+	margin: 0;
+	padding: 2rem 1.25rem 4rem;
+	background: var(--bg);
+	color: var(--text);
+	font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+	-webkit-font-smoothing: antialiased;
+}
+
+main {
+	max-width: 62ch;
+	margin: 0 auto;
+}
+
+h1 {
+	margin: 0 0 1.5rem;
+	font-size: 1.35rem;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	color: var(--accent);
+}
+
+figure {
+	margin: 0 0 2rem;
+}
+
+/* The intrinsic size is 900x420; height:auto keeps that ratio as the width
+   collapses on a phone, so the odometer never distorts. */
+img {
+	display: block;
+	width: 100%;
+	height: auto;
+	border: 1px solid var(--border);
+	border-radius: 10px;
+	background: var(--surface);
+}
+
+figcaption {
+	margin-top: 0.85rem;
+	color: var(--muted);
+	font-size: 0.95rem;
+	text-align: center;
+}
+
+figcaption strong {
+	color: var(--text);
+	font-variant-numeric: tabular-nums;
+}
+
+.note {
+	font-size: 0.85rem;
+}
+
+p {
+	margin: 0 0 1.25rem;
+	color: var(--muted);
+}
+
+.colophon {
+	margin-top: 2.5rem;
+	padding-top: 1.25rem;
+	border-top: 1px solid var(--border);
+	font-size: 0.9rem;
+}
+
+code {
+	padding: 0.1em 0.35em;
+	border-radius: 4px;
+	background: var(--surface);
+	color: var(--text);
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-size: 0.9em;
+}
+
+a {
+	color: var(--accent);
+	text-decoration-thickness: 1px;
+	text-underline-offset: 2px;
+}
+
+a:hover {
+	text-decoration-thickness: 2px;
+}

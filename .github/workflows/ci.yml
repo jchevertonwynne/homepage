@@ -1,0 +1,122 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A second push to the same branch cancels the first — no point finishing a run
+# for a commit that has already been superseded.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          # Track the toolchain the module already declares, so bumping Go is a
+          # one-line change in go.mod rather than two.
+          go-version-file: go.mod
+          cache: true
+
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "These files need gofmt:"
+            echo "$unformatted"
+            gofmt -d .
+            exit 1
+          fi
+
+      - name: go vet
+        run: go vet ./...
+
+      # This module has no dependencies at all, and that is worth keeping. A
+      # stale go.mod here would mean one crept in.
+      - name: go mod tidy is up to date
+        run: |
+          go mod tidy
+          if ! git diff --quiet go.mod; then
+            echo "go.mod is stale — run 'make tidy' and commit the result:"
+            git diff go.mod
+            exit 1
+          fi
+
+      - name: Test
+        run: go test -race -cover ./...
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build for this host
+        run: go build ./...
+
+      # Pure Go and no cgo, so both Pi targets must cross-compile without a
+      # toolchain. Verify that stays true.
+      - name: Cross-compile for Raspberry Pi
+        run: |
+          GOOS=linux GOARCH=arm64 go build -o /tmp/homepage-arm64 .
+          GOOS=linux GOARCH=arm GOARM=6 go build -o /tmp/homepage-armv6 .
+
+  deploy:
+    name: Deploy to the Pi
+    needs: [test, build]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # Reuses the same Makefile target a human runs locally, so there is only
+      # one deploy implementation to keep correct rather than two that drift.
+      - name: Build for the Pi
+        run: make build-pi
+
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v2
+        with:
+          authkey: ${{ secrets.TAILSCALE_AUTHKEY }}
+
+      - name: Install deploy key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.PI_DEPLOY_SSH_KEY }}
+
+      # The Pi's MagicDNS name does not resolve from an ephemeral runner even
+      # when the tailnet connection is up, so the deploy uses its Tailscale IP.
+      # A human running `make deploy` locally still gets the friendly hostname.
+      - name: Trust the Pi's host key
+        run: ssh-keyscan -H 100.70.4.105 >> ~/.ssh/known_hosts
+
+      - name: Deploy
+        run: make deploy PI_HOST=100.70.4.105 PI_USER=jcw
+
+      # /healthz rather than /, so a deploy does not register as a visitor.
+      - name: Health check
+        run: |
+          for _ in $(seq 1 10); do
+            curl -sf http://100.70.4.105:8091/healthz && exit 0
+            sleep 2
+          done
+          echo "::error::Pi did not come back healthy after deploy"
+          exit 1

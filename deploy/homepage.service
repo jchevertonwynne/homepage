@@ -1,0 +1,41 @@
+# systemd unit for the homepage. Install to /etc/systemd/system/homepage.service.
+
+[Unit]
+Description=jchevertonwynne.uk homepage
+After=network-online.target
+Wants=network-online.target
+
+# A restart loop should not hit systemd's default 5-starts-in-10s limit and
+# give up permanently. This belongs in [Unit] — systemd ignores it in
+# [Service] and only says so in the journal.
+StartLimitIntervalSec=0
+
+[Service]
+User=jcw
+Restart=on-failure
+RestartSec=5s
+
+# StateDirectory creates and chowns /var/lib/homepage, so the visit count
+# lives somewhere systemd manages rather than in a home directory. That is
+# what lets ProtectHome stay on below, and it means the count survives the
+# binary being replaced on every deploy.
+StateDirectory=homepage
+ExecStart=/home/jcw/homepage-arm64 -addr :8091 -counter /var/lib/homepage/count.txt
+
+# SIGTERM is the signal the counter flushes on, and it is what systemd sends
+# by default. The generous stop timeout is so a flush is never cut short —
+# writing one small file takes milliseconds, but being killed mid-write is
+# exactly the case the atomic rename exists to survive.
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# read-only rather than off entirely: the binary itself lives in /home/jcw
+# and still has to be executable from there. Only the state directory is
+# writable.
+ProtectHome=read-only
+ProtectSystem=strict
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

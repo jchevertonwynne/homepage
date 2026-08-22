@@ -1,0 +1,31 @@
+# systemd unit for the homepage's Cloudflare tunnel. Install to
+# /etc/systemd/system/cloudflared-homepage.service.
+#
+# Named cloudflared-homepage rather than cloudflared because the Pi already
+# runs a cloudflared.service for weight-tracker. Two tunnels, two units, two
+# configs — so a change to one cannot take the other's site off the internet.
+
+[Unit]
+Description=Cloudflare tunnel for the homepage
+After=network-online.target homepage.service
+Wants=network-online.target
+
+# Belongs in [Unit]; systemd ignores it in [Service].
+StartLimitIntervalSec=0
+
+[Service]
+User=jcw
+ExecStart=/usr/bin/cloudflared --no-autoupdate --config /etc/cloudflared/homepage.yml tunnel run
+Restart=on-failure
+RestartSec=5s
+
+# apt owns the binary and handles updates, so the self-updater is off above and
+# the filesystem can stay read-only to it. ProtectHome is read-only rather than
+# true because the tunnel credentials live in ~/.cloudflared.
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

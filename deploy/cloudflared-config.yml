@@ -1,0 +1,26 @@
+# cloudflared config for the homepage tunnel. Install to
+# /etc/cloudflared/homepage.yml.
+#
+# Note the filename: the Pi already runs a tunnel for weight-tracker out of
+# /etc/cloudflared/config.yml under the unit name cloudflared.service. This one
+# is deliberately a separate tunnel with its own config and its own unit
+# (cloudflared-homepage.service) so each repo owns its own exposure and neither
+# can break the other's routing.
+#
+# `cloudflared tunnel create homepage` prints the UUID both fields below need.
+# `make deploy-tunnel` substitutes it, so it never lands in the repo.
+
+tunnel: TUNNEL_UUID
+credentials-file: /home/jcw/.cloudflared/TUNNEL_UUID.json
+
+# Unlike weight-tracker, nothing sits in front of this hostname — no
+# Cloudflare Access, no login. That is the point: it is a public homepage.
+# Everything that makes it safe to expose lives in the app itself (fixed
+# canvas size, bounded count parsing, no writes reachable over HTTP).
+ingress:
+  - hostname: jchevertonwynne.uk
+    service: http://localhost:8091
+
+  # A catch-all must come last or cloudflared refuses to start. It is also
+  # what stops a hostname pointed here by mistake from reaching the app.
+  - service: http_status:404

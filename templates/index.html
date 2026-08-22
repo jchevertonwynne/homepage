@@ -1,0 +1,39 @@
+{{define "index"}}<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+	<title>jchevertonwynne.uk</title>
+	<link rel="stylesheet" href="/static/style.css">
+	<meta name="theme-color" content="#0b0e11">
+	<meta name="description" content="A Raspberry Pi in a house in England, counting visitors and drawing them a picture.">
+</head>
+<body>
+	<main>
+		<h1>hello</h1>
+
+		<figure>
+			<img src="{{.ImageURL}}" width="900" height="420"
+			     alt="A six-digit odometer reading {{printf "%06d" .Count}} over a field of translucent circles">
+			<figcaption>
+				you are visitor <strong>#{{.Count}}</strong>
+				{{if .Capped}}<br><span class="note">(the odometer only has six digits — you have outgrown it)</span>{{end}}
+			</figcaption>
+		</figure>
+
+		<p>
+			This page is served by a Raspberry Pi sitting in a house in England.
+			Every visit bumps a number on its SD card, and that number seeds the
+			picture above — the colours, the circles, all of it. Yours is the only
+			one that looks like that.
+		</p>
+
+		<p class="colophon">
+			Go, no dependencies, no JavaScript. The image is drawn with the standard
+			library's <code>image</code> package, a pixel at a time.
+			<a href="https://github.com/jchevertonwynne/homepage">source</a>
+		</p>
+	</main>
+</body>
+</html>
+{{end}}
