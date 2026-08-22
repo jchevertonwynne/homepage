@@ -24,7 +24,10 @@ jobs:
           # Track the toolchain the module already declares, so bumping Go is a
           # one-line change in go.mod rather than two.
           go-version-file: go.mod
-          cache: true
+          # No dependencies means no go.sum, and setup-go's cache keys on
+          # go.sum — leaving it on just warns "Dependencies file is not found"
+          # on every run. There is nothing to cache.
+          cache: false
 
       - name: gofmt
         run: |
@@ -62,7 +65,10 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          cache: true
+          # No dependencies means no go.sum, and setup-go's cache keys on
+          # go.sum — leaving it on just warns "Dependencies file is not found"
+          # on every run. There is nothing to cache.
+          cache: false
 
       - name: Build for this host
         run: go build ./...
@@ -85,7 +91,10 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          cache: true
+          # No dependencies means no go.sum, and setup-go's cache keys on
+          # go.sum — leaving it on just warns "Dependencies file is not found"
+          # on every run. There is nothing to cache.
+          cache: false
 
       # Reuses the same Makefile target a human runs locally, so there is only
       # one deploy implementation to keep correct rather than two that drift.
