@@ -99,3 +99,36 @@ a {
 a:hover {
 	text-decoration-thickness: 2px;
 }
+
+/* The easter egg: any visit number with a 67 in it. The whole page shifts
+   from green to gold and the caption gains a line that rocks between the two
+   syllables. Rendered server-side into the markup — the page still ships no
+   JavaScript. */
+
+body.six-seven {
+	--accent: #ffd166;
+}
+
+.egg {
+	display: inline-block;
+	margin-top: 0.35rem;
+	color: var(--accent);
+	font-size: 0.95rem;
+	font-weight: 600;
+	letter-spacing: 0.18em;
+	text-transform: uppercase;
+	animation: six-seven 1.6s ease-in-out infinite;
+}
+
+@keyframes six-seven {
+	0%, 100% { transform: rotate(-4deg) translateY(0); }
+	50%      { transform: rotate(4deg) translateY(-2px); }
+}
+
+/* An animation that never stops is exactly what this setting is for. The
+   colour shift carries the joke on its own. */
+@media (prefers-reduced-motion: reduce) {
+	.egg {
+		animation: none;
+	}
+}

@@ -25,8 +25,21 @@ import (
 func repoFS() fs.FS { return os.DirFS("../..") }
 
 func newServer(t *testing.T) (*http.ServeMux, *counter.Counter) {
+	return newServerAt(t, 0)
+}
+
+// newServerAt is newServer with the count already at start, for the tests that
+// care about a particular visit number. It seeds a count file rather than
+// calling Next in a loop, so reaching visit 6700 costs one write.
+func newServerAt(t *testing.T, start uint64) (*http.ServeMux, *counter.Counter) {
 	t.Helper()
-	c, err := counter.Load(filepath.Join(t.TempDir(), "count.txt"))
+	path := filepath.Join(t.TempDir(), "count.txt")
+	if start > 0 {
+		if err := os.WriteFile(path, []byte(strconv.FormatUint(start, 10)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	c, err := counter.Load(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,4 +212,50 @@ func TestConcurrentVisitsAreAllCounted(t *testing.T) {
 	if got := c.Value(); got != n {
 		t.Errorf("count = %d after %d concurrent visits", got, n)
 	}
+}
+
+// The easter egg fires on the digits as written, so 167 counts and 607 does
+// not. It is driven by a class on <body> plus a caption line, both rendered
+// server-side — the page promises no JavaScript in its own colophon.
+func TestSixSevenEasterEgg(t *testing.T) {
+	cases := map[uint64]bool{
+		66:   false,
+		67:   true,
+		167:  true,
+		607:  false,
+		670:  true,
+		6700: true,
+		7607: false, // a 7, a 6 and a 0 in the way — the digits must be adjacent
+		7676: true,
+	}
+	for visit, want := range cases {
+		mux, _ := newServerAt(t, visit-1)
+		body := get(t, mux, "/").Body.String()
+
+		if got := strings.Contains(body, `class="six-seven"`); got != want {
+			t.Errorf("visit #%d: six-seven body class = %v, want %v", visit, got, want)
+		}
+		if got := strings.Contains(body, "six seven"); got != want {
+			t.Errorf("visit #%d: caption egg = %v, want %v", visit, got, want)
+		}
+	}
+}
+
+// The egg has to be styled to be an egg at all: without these rules the class
+// on <body> does nothing and the caption line is indistinguishable from the
+// text above it.
+func TestSixSevenIsStyled(t *testing.T) {
+	rec := get(t, newServerMux(t), "/static/style.css")
+	css := rec.Body.String()
+	for _, want := range []string{"body.six-seven", ".egg", "prefers-reduced-motion"} {
+		if !strings.Contains(css, want) {
+			t.Errorf("stylesheet has no %q rule, so the easter egg would not show", want)
+		}
+	}
+}
+
+func newServerMux(t *testing.T) *http.ServeMux {
+	t.Helper()
+	mux, _ := newServer(t)
+	return mux
 }

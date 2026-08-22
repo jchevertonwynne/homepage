@@ -3,6 +3,8 @@ package handlers
 import (
 	"log"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"homepage/internal/art"
 )
@@ -12,6 +14,7 @@ type indexData struct {
 	Count    uint64
 	ImageURL string
 	Capped   bool
+	SixSeven bool
 }
 
 // HandleIndex counts the visit and renders the page. This is the only route
@@ -27,6 +30,7 @@ func (s *Server) HandleIndex(w http.ResponseWriter, r *http.Request) {
 		Count:    n,
 		ImageURL: imagePath(min(n, art.MaxCount)),
 		Capped:   n > art.MaxCount,
+		SixSeven: sixSeven(n),
 	}
 
 	// The count changes on every visit, so the page itself must never be
@@ -41,4 +45,12 @@ func (s *Server) HandleIndex(w http.ResponseWriter, r *http.Request) {
 		// let the truncated response speak for itself.
 		log.Printf("render index: %v", err)
 	}
+}
+
+// sixSeven reports whether the visit number has a 67 in it, which is the whole
+// qualification for the easter egg. It looks at the digits as written — 167
+// and 6700 count, 607 does not — because the joke is about seeing "67" in the
+// number on the page, not about arithmetic.
+func sixSeven(n uint64) bool {
+	return strings.Contains(strconv.FormatUint(n, 10), "67")
 }
