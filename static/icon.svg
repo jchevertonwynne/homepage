@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192">
+	<rect width="192" height="192" rx="32" fill="#0b0e11"/>
+	<!-- One seven-segment digit, the motif the odometer on the page is built
+	     from. Segments a, b, c, f and g lit: a nine. -->
+	<g fill="#82ffaf">
+		<rect x="62" y="40" width="68" height="14" rx="4"/>
+		<rect x="124" y="48" width="14" height="44" rx="4"/>
+		<rect x="124" y="100" width="14" height="44" rx="4"/>
+		<rect x="54" y="48" width="14" height="44" rx="4"/>
+		<rect x="62" y="89" width="68" height="14" rx="4"/>
+	</g>
+	<rect x="62" y="138" width="68" height="14" rx="4" fill="#82ffaf" opacity="0.28"/>
+</svg>
