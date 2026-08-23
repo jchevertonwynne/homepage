@@ -1,8 +1,6 @@
 package handlers_test
 
 import (
-	"bytes"
-	"image/png"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
@@ -13,7 +11,6 @@ import (
 	"sync"
 	"testing"
 
-	"homepage/internal/art"
 	"homepage/internal/counter"
 	"homepage/internal/handlers"
 )
@@ -80,92 +77,15 @@ func TestIndexIsNotCached(t *testing.T) {
 	}
 }
 
-func TestIndexLinksToAnImageThatExists(t *testing.T) {
-	mux, _ := newServer(t)
-	body := get(t, mux, "/").Body.String()
-
-	start := strings.Index(body, "/image/")
-	if start < 0 {
-		t.Fatalf("no image URL in the page: %s", body)
-	}
-	url := body[start : start+strings.Index(body[start:], `"`)]
-
-	rec := get(t, mux, url)
-	if rec.Code != http.StatusOK {
-		t.Errorf("the page links to %s, which returns %d", url, rec.Code)
-	}
-}
-
 // Only the page counts. If image loads or health checks incremented, a single
 // visit would register as several.
 func TestOnlyTheIndexIncrements(t *testing.T) {
 	mux, c := newServer(t)
-	for _, path := range []string{"/image/5.png", "/healthz", "/static/style.css", "/nope"} {
+	for _, path := range []string{"/healthz", "/static/style.css", "/nope"} {
 		get(t, mux, path)
 	}
 	if got := c.Value(); got != 0 {
 		t.Errorf("count = %d after non-page requests, want 0", got)
-	}
-}
-
-func TestImageServesAPNG(t *testing.T) {
-	mux, _ := newServer(t)
-	rec := get(t, mux, "/image/1337.png")
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("GET /image/1337.png = %d, want 200", rec.Code)
-	}
-	if got := rec.Header().Get("Content-Type"); got != "image/png" {
-		t.Errorf("Content-Type = %q, want image/png", got)
-	}
-	img, err := png.Decode(bytes.NewReader(rec.Body.Bytes()))
-	if err != nil {
-		t.Fatalf("body is not a valid PNG: %v", err)
-	}
-	if img.Bounds().Dx() != art.Width || img.Bounds().Dy() != art.Height {
-		t.Errorf("image is %dx%d, want %dx%d", img.Bounds().Dx(), img.Bounds().Dy(), art.Width, art.Height)
-	}
-	if got := rec.Header().Get("Content-Length"); got == "" {
-		t.Error("no Content-Length; Cloudflare caches a known-length body more readily")
-	}
-}
-
-// The immutable header is a promise that this URL's bytes never change.
-func TestImageIsCachedImmutably(t *testing.T) {
-	mux, _ := newServer(t)
-	rec := get(t, mux, "/image/42.png")
-	got := rec.Header().Get("Cache-Control")
-	for _, want := range []string{"public", "immutable", "max-age="} {
-		if !strings.Contains(got, want) {
-			t.Errorf("Cache-Control = %q, want it to contain %q", got, want)
-		}
-	}
-}
-
-func TestImageIsStableAcrossRequests(t *testing.T) {
-	mux, _ := newServer(t)
-	first := get(t, mux, "/image/42.png").Body.Bytes()
-	second := get(t, mux, "/image/42.png").Body.Bytes()
-	if !bytes.Equal(first, second) {
-		t.Error("the same URL returned different bytes; the immutable cache header would be a lie")
-	}
-}
-
-func TestImageRejectsBadNames(t *testing.T) {
-	mux, _ := newServer(t)
-	cases := map[string]int{
-		"/image/notanumber.png":              http.StatusBadRequest,
-		"/image/-1.png":                      http.StatusBadRequest,
-		"/image/1.5.png":                     http.StatusBadRequest,
-		"/image/42":                          http.StatusNotFound, // missing extension
-		"/image/42.jpg":                      http.StatusNotFound,
-		"/image/1000000.png":                 http.StatusNotFound,   // past the six-digit odometer
-		"/image/99999999999999999999999.png": http.StatusBadRequest, // overflows uint64
-	}
-	for path, want := range cases {
-		if got := get(t, mux, path).Code; got != want {
-			t.Errorf("GET %s = %d, want %d", path, got, want)
-		}
 	}
 }
 
@@ -185,7 +105,7 @@ func TestHealthz(t *testing.T) {
 // visit.
 func TestUnknownPathsAreNotTheHomepage(t *testing.T) {
 	mux, c := newServer(t)
-	for _, path := range []string{"/wp-admin", "/index.php", "/image/", "/a/b/c"} {
+	for _, path := range []string{"/wp-admin", "/index.php", "/image/1.png", "/a/b/c"} {
 		if got := get(t, mux, path).Code; got == http.StatusOK {
 			t.Errorf("GET %s returned 200, want a 404", path)
 		}
@@ -258,4 +178,60 @@ func newServerMux(t *testing.T) *http.ServeMux {
 	t.Helper()
 	mux, _ := newServer(t)
 	return mux
+}
+
+// The picture is embedded rather than linked, so there is no URL to walk.
+func TestImageIsInlinedNotLinked(t *testing.T) {
+	mux, _ := newServer(t)
+	body := get(t, mux, "/").Body.String()
+
+	if strings.Contains(body, "/image/") {
+		t.Error("the page still references an /image/ URL")
+	}
+	if !strings.Contains(body, "src=\"data:image/png;base64,") {
+		t.Fatal("the page does not embed a PNG data URI")
+	}
+}
+
+// html/template rejects data: URIs in src by default and silently replaces
+// them with #ZgotmplZ — the page renders, the image is broken, and nothing
+// logs an error. The Image field is template.URL to avoid that, and this is
+// the assertion that catches it if someone changes the type back.
+func TestImageDataURISurvivesTemplating(t *testing.T) {
+	mux, _ := newServer(t)
+	body := get(t, mux, "/").Body.String()
+
+	if strings.Contains(body, "ZgotmplZ") {
+		t.Fatal("html/template sanitised the data URI away; Image must be template.URL")
+	}
+}
+
+// The whole point of inlining: previous visitors' pictures must not be
+// fetchable, by any address.
+func TestNoImageEndpointRemains(t *testing.T) {
+	mux, _ := newServer(t)
+	for _, path := range []string{"/image/1.png", "/image/1", "/image/", "/image"} {
+		if code := get(t, mux, path).Code; code == http.StatusOK {
+			t.Errorf("GET %s returned 200; the image endpoint should be gone", path)
+		}
+	}
+}
+
+// The embedded image must be the one for this visit, not a stale or shared
+// one: two visits in a row must embed different pictures.
+func TestEachVisitEmbedsItsOwnImage(t *testing.T) {
+	mux, _ := newServer(t)
+	first := get(t, mux, "/").Body.String()
+	second := get(t, mux, "/").Body.String()
+
+	extract := func(s string) string {
+		i := strings.Index(s, "base64,")
+		if i < 0 {
+			t.Fatal("no data URI in the page")
+		}
+		return s[i : i+200]
+	}
+	if extract(first) == extract(second) {
+		t.Error("consecutive visits embedded the same image")
+	}
 }

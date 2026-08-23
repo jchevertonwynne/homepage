@@ -35,10 +35,6 @@ func New(c *counter.Counter, templatesFS, staticFS fs.FS) *Server {
 
 func (s *Server) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /{$}", s.HandleIndex)
-	// A wildcard has to be a whole path segment, so this cannot be written as
-	// "/image/{n}.png" — that would register a literal segment named
-	// "{n}.png". The handler splits the extension off itself.
-	mux.HandleFunc("GET /image/{file}", s.HandleImage)
 	mux.HandleFunc("GET /healthz", s.HandleHealthz)
 	mux.Handle("GET /static/", http.FileServerFS(s.staticFS))
 }

@@ -14,7 +14,7 @@
 		<h1>hello</h1>
 
 		<figure>
-			<img src="{{.ImageURL}}" width="900" height="420"
+			<img src="{{.Image}}" width="900" height="420"
 			     alt="A six-digit odometer reading {{printf "%06d" .Count}} over a field of translucent circles">
 			<figcaption>
 				you are visitor <strong>#{{.Count}}</strong>
@@ -32,7 +32,9 @@
 
 		<p class="colophon">
 			Go, no dependencies, no JavaScript. The image is drawn with the standard
-			library's <code>image</code> package, a pixel at a time.
+			library's <code>image</code> package, a pixel at a time, and embedded
+			straight into this page — it has no address of its own, so nobody can
+			go looking at anyone else's.
 			<a href="https://github.com/jchevertonwynne/homepage">source</a>
 		</p>
 	</main>

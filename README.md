@@ -46,13 +46,28 @@ goes through the `rgba` helper for that reason, and a test asserts it.
 
 | Route | |
 |---|---|
-| `GET /` | The page. Increments the counter. `Cache-Control: no-store` |
-| `GET /image/{n}.png` | The picture for count `n`. Immutable, cached for a year |
+| `GET /` | The page, with the picture embedded. Increments the counter. `Cache-Control: no-store` |
 | `GET /healthz` | Liveness. Does **not** increment |
 
-Putting the count in the image path is what makes the expensive half of the
-work cacheable — Cloudflare serves repeat hits from its edge, so the Pi renders
-each image at most once.
+The picture is a `data:` URI in the page, not a URL. It used to be served from
+`/image/{n}.png`, which was immutably cacheable and meant the Pi rendered each
+image at most once — but it also meant anyone could walk `/image/1.png`
+upwards and look at every visitor's picture, which makes "yours is the only one
+that looks like that" untrue. There is now no address to walk.
+
+That trade was measured rather than assumed. Inlining costs the only cacheable
+thing the site had: every page load renders (~155ms on the Pi) instead of
+Cloudflare serving a repeat, and the response grows from ~1.3KB to ~80KB. At
+this traffic that is a few seconds of CPU an hour.
+
+If the cost ever matters, the middle path is an unguessable URL —
+`/image/179-<hmac>.png` signed with a server secret — which restores caching
+while still making enumeration impossible.
+
+Note for anyone editing the handler: the field is `template.URL`, not `string`.
+`html/template` rejects `data:` URIs in `src` by default and silently
+substitutes `#ZgotmplZ`, so the page would render with a broken image and
+nothing in the logs. A test asserts it.
 
 ## Public, deliberately
 
@@ -62,7 +77,7 @@ Cloudflare Access, no login. Anyone can load it, which means:
 - The canvas size is a **fixed constant**, never a query parameter. A
   caller-chosen width and height would let anyone ask a Raspberry Pi to
   allocate and fill an arbitrarily large buffer.
-- `{n}` is parsed with `ParseUint` and rejected above six digits.
+- There is no image endpoint to abuse; the picture is embedded in the page.
 - Nothing reachable over HTTP writes anything but the counter.
 - The count *will* be inflated by crawlers. That is what a public hit counter
   is; it is not measuring anything important.
