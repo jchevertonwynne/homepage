@@ -33,8 +33,12 @@ An unreadable count file is a startup error rather than a silent reset to zero.
 If something is there and we cannot parse it, that is worth a human looking at.
 
 **`internal/art`** is deterministic: the same count always produces the same
-bytes. That is what makes the immutable cache header on `/image/{n}.png`
-truthful rather than a promise that breaks at the next deploy.
+bytes. That used to be load-bearing, because the immutable cache header on the
+old image endpoint was only truthful if a URL's bytes never changed. Now that
+the picture is inlined it is no longer required for correctness — but it is
+kept, because "visit 1337 always looks like this" is a nicer property than
+"visit 1337 looks like whatever it rendered that time", and it lets the tests
+assert on exact output instead of vague ones.
 
 Note for anyone editing it: `image/draw` treats `color.RGBA` as
 **alpha-premultiplied**. Writing `color.RGBA{120, 255, 170, 26}` for a dim
