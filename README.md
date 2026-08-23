@@ -8,7 +8,7 @@ visitors and draws each one a picture.
   `image` package, so `go.mod` has an empty require block and the Pi
   cross-compile needs no toolchain
 - No JavaScript
-- Runs on a Raspberry Pi, exposed through a Cloudflare tunnel
+- Runs on a Raspberry Pi in a k3s cluster, exposed through a Cloudflare tunnel
 
 Every visit to `/` increments a counter. That number is zero-padded to six
 digits and drawn as a seven-segment odometer, composited over a field of
@@ -21,8 +21,8 @@ one for 1,338.
 **`internal/counter`** keeps the count in memory and writes it to disk on a
 ticker, plus once more on SIGTERM. Writing on every request would be one SD
 card write per crawler hit, which is a lot of wear for a number nobody reads to
-the second. Because systemd sends SIGTERM on restart and shutdown, a deploy or
-a reboot loses nothing; only a power cut can, and at most one tick's worth.
+the second. Kubernetes sends SIGTERM before SIGKILL, so a deploy or a reboot
+loses nothing; only a power cut can, and at most one tick's worth.
 
 The write itself goes to a temp file, is fsynced, renamed over the target, and
 then the containing directory is fsynced too — a rename is atomic but its
@@ -77,53 +77,36 @@ make run          # :8080
 make check        # gofmt, vet, race tests — what CI runs
 ```
 
-## Deploy
+## Deployment
 
-Same shape as `weight-tracker`: cross-compile, upload, restart the unit.
+Runs on the k3s cluster described in
+[homelab](https://github.com/jchevertonwynne/homelab). Push to `main`: CI
+builds an arm64 image, Flux notices the new tag, commits it to the homelab
+repo and rolls the pod. Nothing here touches the Pi directly.
 
-```sh
-make build-pi     # GOOS=linux GOARCH=arm64
-make deploy       # upload + restart on PI_HOST
-make deploy-tunnel
-```
+The visit count lives on a `hostPath` at `/var/lib/homepage`, which predates
+the cluster; newer apps get a PersistentVolumeClaim instead. The Deployment
+uses `Recreate` rather than `RollingUpdate` because the counter is
+single-writer — two overlapping pods would each hold a count in memory and
+the last to stop would win. The cost is a few seconds of 502 on every deploy,
+which is the right trade for not losing visits.
 
-Pushing to `main` does the same thing automatically via `.github/workflows/ci.yml`.
-
-### One-time setup on the Pi
-
-1. Install the unit from `deploy/homepage.service` to `/etc/systemd/system/`,
-   then `sudo systemctl enable --now homepage`. It declares
-   `StateDirectory=homepage`, so systemd creates and owns `/var/lib/homepage`
-   for the count file — deliberately not next to the binary, so replacing the
-   binary on every deploy never touches it.
-2. Create the tunnel and route the apex:
-   ```sh
-   cloudflared tunnel create homepage
-   cloudflared tunnel route dns homepage jchevertonwynne.uk
-   ```
-   Cloudflare flattens the CNAME at the zone root, so an apex hostname works.
-   Then `make deploy-tunnel` to install the config and unit.
-3. **A dedicated deploy key.** The existing key on this Pi is restricted by a
-   forced-command wrapper to exactly the two commands `weight-tracker`'s deploy
-   issues, so it cannot deploy this. Generate a second keypair with its own
-   wrapper allowing only `cat > ~/homepage-new` and the homepage
-   stop/replace/start sequence — a second key rather than widening the first,
-   so a leaked homepage key cannot touch weight-tracker.
-4. Repository secrets: `TAILSCALE_AUTHKEY` (the existing `tag:ci` key is
-   already scoped to the Pi's `:22` and can be reused) and `PI_DEPLOY_SSH_KEY`
-   set to the new key's private half.
-
-The tunnel deliberately uses its own name, config path
-(`/etc/cloudflared/homepage.yml`) and unit (`cloudflared-homepage.service`), so
-it cannot collide with the weight-tracker tunnel already running on this Pi.
+`make build-pi` still cross-compiles a bare binary for testing on the Pi
+directly, but it is not how this gets deployed.
 
 ## Backups
 
 The count is one small file:
 
 ```sh
-scp jcw@jcwpi:/var/lib/homepage/count.txt .
+ssh jcw@jcwpi 'sudo cat /var/lib/homepage/count.txt'
 ```
 
-Restoring is writing a number into it while the service is stopped. There is
-nothing else to keep.
+Restoring is writing a number into that file while the Deployment is scaled
+to zero. There is nothing else to keep.
+
+```sh
+kubectl -n apps scale deploy/homepage --replicas=0
+ssh jcw@jcwpi "echo 1234 | sudo tee /var/lib/homepage/count.txt"
+kubectl -n apps scale deploy/homepage --replicas=1
+```
