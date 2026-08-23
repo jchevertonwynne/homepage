@@ -26,8 +26,8 @@ help:
 	@echo "make logs          - tail the daemon's log file"
 	@echo "make build         - build a local binary into $(BIN_DIR)/"
 	@echo "make build-pi      - cross-compile for Raspberry Pi (PI_ARCH=$(PI_ARCH))"
-	@echo "make deploy        - build-pi, then upload + restart the systemd service on PI_HOST=$(PI_HOST)"
-	@echo "make deploy-tunnel - install the cloudflared config + unit on PI_HOST and restart the tunnel"
+	@echo "make deploy        - retired; deployment is Flux reconciling the homelab repo"
+	@echo "make deploy-tunnel - retired; the tunnels run as pods, see the homelab repo"
 	@echo "make clean         - stop the daemon, then remove build output and the local count file"
 	@echo "make test          - go test ./... with the race detector"
 	@echo "make check         - everything CI runs: gofmt check, vet, tests"
@@ -105,13 +105,21 @@ endif
 #
 # The visit count lives in /var/lib/homepage (see deploy/homepage.service), not
 # next to the binary, so replacing the binary never touches it.
-deploy: build-pi
-	ssh $(PI_USER)@$(PI_HOST) 'cat > ~/$(BINARY)-new' < $(BIN_DIR)/$(BINARY)-$(PI_ARCH)
-	ssh $(PI_USER)@$(PI_HOST) '\
-		sudo systemctl stop $(BINARY) 2>/dev/null; \
-		mv ~/$(BINARY)-new ~/$(BINARY)-$(PI_ARCH); \
-		chmod +x ~/$(BINARY)-$(PI_ARCH); \
-		sudo systemctl start $(BINARY)'
+# Retired. homepage runs in the k3s cluster now, reconciled by Flux from the
+# homelab repo, and the homepage.service unit on the Pi is disabled.
+#
+# The old recipe ended with `sudo systemctl start homepage`, and a disabled unit
+# still starts when asked — disable only removes the boot-time symlink. Running
+# it now would put a host process alongside the pod, both writing the same
+# files through the same hostPath. So the target refuses rather than being
+# deleted: someone with it in muscle memory gets an explanation instead of a
+# split-brain.
+deploy:
+	@echo "make deploy is retired - homepage is deployed by Flux from the homelab repo."
+	@echo "Push to main; CI builds the image, and the cluster picks it up."
+	@echo "Running the old recipe would start the disabled host unit alongside the pod,"
+	@echo "with both writing the same data through the same hostPath."
+	@exit 1
 
 # The tunnel UUID is deliberately not in the repo. The Pi already knows it, so
 # read it back here rather than committing it or carrying it as a CI secret.
@@ -121,21 +129,14 @@ deploy: build-pi
 #
 # Note the homepage-specific config path and unit name — the Pi runs a second,
 # unrelated tunnel for weight-tracker out of /etc/cloudflared/config.yml.
+# Retired alongside deploy. The tunnel runs as a pod now, configured by the
+# homelab repo; the host's cloudflared-homepage.service is disabled. This recipe
+# would rewrite /etc/cloudflared and restart that unit, putting a second
+# connector on the tunnel and leaving host config that nothing reads.
 deploy-tunnel:
-	@uuid=`ssh $(PI_USER)@$(PI_HOST) 'cloudflared tunnel list --name $(TUNNEL_NAME) --output json | jq -r ".[0].id // empty"'`; \
-	if [ -z "$$uuid" ]; then \
-		echo "no tunnel named $(TUNNEL_NAME) on $(PI_HOST) - run 'cloudflared tunnel create $(TUNNEL_NAME)' there first"; \
-		exit 1; \
-	fi; \
-	echo "installing config for tunnel $$uuid"; \
-	sed "s/TUNNEL_UUID/$$uuid/g" deploy/cloudflared-config.yml \
-		| ssh $(PI_USER)@$(PI_HOST) 'cat > /tmp/homepage-tunnel.yml \
-			&& cloudflared --config /tmp/homepage-tunnel.yml tunnel ingress validate \
-			&& sudo mv /tmp/homepage-tunnel.yml /etc/cloudflared/homepage.yml'
-	ssh $(PI_USER)@$(PI_HOST) 'sudo tee /etc/systemd/system/cloudflared-homepage.service >/dev/null' < deploy/cloudflared-homepage.service
-	ssh $(PI_USER)@$(PI_HOST) 'sudo systemctl daemon-reload \
-		&& sudo systemctl enable cloudflared-homepage \
-		&& sudo systemctl restart cloudflared-homepage'
+	@echo "make deploy-tunnel is retired - the tunnel runs as a pod."
+	@echo "Its ingress config lives in the homelab repo under infrastructure/cloudflared."
+	@exit 1
 
 clean: stop
 	rm -rf $(BIN_DIR)
