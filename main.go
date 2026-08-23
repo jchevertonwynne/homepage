@@ -13,6 +13,7 @@ import (
 
 	"homepage/internal/counter"
 	"homepage/internal/handlers"
+	"homepage/internal/metrics"
 )
 
 //go:embed templates/*.html
@@ -37,7 +38,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:    *addr,
-		Handler: newMux(c),
+		Handler: metrics.Instrument(newMux(c)),
 		// A public endpoint needs these. Without ReadHeaderTimeout a single
 		// client can hold a connection open indefinitely by dribbling out
 		// headers, and enough of those exhaust the server.
@@ -87,5 +88,6 @@ func main() {
 func newMux(c *counter.Counter) *http.ServeMux {
 	mux := http.NewServeMux()
 	handlers.New(c, templatesFS, staticFS).RegisterRoutes(mux)
+	mux.Handle("GET /metrics", metrics.Handler())
 	return mux
 }
