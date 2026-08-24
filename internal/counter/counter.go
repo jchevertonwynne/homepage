@@ -76,45 +76,47 @@ func (c *Counter) Value() uint64 {
 // afterwards too: rename is atomic, but the directory entry it creates is not
 // durable until the directory itself is flushed, and durability across an
 // abrupt reboot is the whole point of this file.
-func (c *Counter) Flush() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if !c.dirty {
+func (c *Counter) Flush(ctx context.Context) error {
+	return withSpan(ctx, "Flush", func(ctx context.Context) error {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		if !c.dirty {
+			return nil
+		}
+
+		dir := filepath.Dir(c.path)
+		tmp := c.path + ".tmp"
+		f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+		if err != nil {
+			return fmt.Errorf("create temp count file: %w", err)
+		}
+		// Any failure from here on leaves tmp behind, so it is removed on every
+		// error path rather than accumulating .tmp files next to the real one.
+		if _, err := fmt.Fprintf(f, "%d\n", c.n); err != nil {
+			f.Close()
+			os.Remove(tmp)
+			return fmt.Errorf("write temp count file: %w", err)
+		}
+		if err := f.Sync(); err != nil {
+			f.Close()
+			os.Remove(tmp)
+			return fmt.Errorf("sync temp count file: %w", err)
+		}
+		if err := f.Close(); err != nil {
+			os.Remove(tmp)
+			return fmt.Errorf("close temp count file: %w", err)
+		}
+		if err := os.Rename(tmp, c.path); err != nil {
+			os.Remove(tmp)
+			return fmt.Errorf("rename count file into place: %w", err)
+		}
+		if err := syncDir(dir); err != nil {
+			return fmt.Errorf("sync count file directory: %w", err)
+		}
+
+		c.dirty = false
 		return nil
-	}
-
-	dir := filepath.Dir(c.path)
-	tmp := c.path + ".tmp"
-	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
-	if err != nil {
-		return fmt.Errorf("create temp count file: %w", err)
-	}
-	// Any failure from here on leaves tmp behind, so it is removed on every
-	// error path rather than accumulating .tmp files next to the real one.
-	if _, err := fmt.Fprintf(f, "%d\n", c.n); err != nil {
-		f.Close()
-		os.Remove(tmp)
-		return fmt.Errorf("write temp count file: %w", err)
-	}
-	if err := f.Sync(); err != nil {
-		f.Close()
-		os.Remove(tmp)
-		return fmt.Errorf("sync temp count file: %w", err)
-	}
-	if err := f.Close(); err != nil {
-		os.Remove(tmp)
-		return fmt.Errorf("close temp count file: %w", err)
-	}
-	if err := os.Rename(tmp, c.path); err != nil {
-		os.Remove(tmp)
-		return fmt.Errorf("rename count file into place: %w", err)
-	}
-	if err := syncDir(dir); err != nil {
-		return fmt.Errorf("sync count file directory: %w", err)
-	}
-
-	c.dirty = false
-	return nil
+	})
 }
 
 // Run flushes on a ticker until ctx is cancelled, then flushes one last time
@@ -133,11 +135,14 @@ func (c *Counter) Run(ctx context.Context, every time.Duration, onErr func(error
 	for {
 		select {
 		case <-t.C:
-			if err := c.Flush(); err != nil && onErr != nil {
+			if err := c.Flush(ctx); err != nil && onErr != nil {
 				onErr(fmt.Errorf("periodic flush: %w", err))
 			}
 		case <-ctx.Done():
-			return c.Flush()
+			// ctx is already Done here, but that only affects cancellation
+			// checks — it doesn't stop a span from being created or
+			// exported, and Flush's own os calls don't check ctx anyway.
+			return c.Flush(ctx)
 		}
 	}
 }

@@ -83,16 +83,19 @@ func main() {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Printf("http shutdown: %v", err)
 	}
-	if err := shutdownTracing(shutdownCtx); err != nil {
-		log.Printf("tracing shutdown: %v", err)
-	}
 
-	// Wait for the final flush before exiting — this is the write that makes
-	// the count survive a restart, so a failure here is worth a non-zero exit.
+	// Must come before shutdownTracing: c.Run's own final flush (triggered
+	// by ctx.Done(), same as this shutdown) happens in that goroutine, and
+	// its span would be silently dropped if the exporter were already
+	// closed by the time it runs.
 	if err := <-flushed; err != nil {
 		log.Fatalf("final flush: %v", err)
 	}
 	log.Printf("stopped at %d visits", c.Value())
+
+	if err := shutdownTracing(shutdownCtx); err != nil {
+		log.Printf("tracing shutdown: %v", err)
+	}
 }
 
 func newMux(c *counter.Counter) *http.ServeMux {

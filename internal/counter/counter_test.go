@@ -62,7 +62,7 @@ func TestFlushRoundTrip(t *testing.T) {
 	for range 7 {
 		c.Next()
 	}
-	if err := c.Flush(); err != nil {
+	if err := c.Flush(t.Context()); err != nil {
 		t.Fatalf("Flush: %v", err)
 	}
 
@@ -81,7 +81,7 @@ func TestFileIsPlainDecimal(t *testing.T) {
 	c, _ := Load(path)
 	c.Next()
 	c.Next()
-	if err := c.Flush(); err != nil {
+	if err := c.Flush(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	b, err := os.ReadFile(path)
@@ -97,7 +97,7 @@ func TestFlushIsNoOpWhenClean(t *testing.T) {
 	path := tempPath(t)
 	c, _ := Load(path)
 
-	if err := c.Flush(); err != nil {
+	if err := c.Flush(t.Context()); err != nil {
 		t.Fatalf("Flush on a clean counter: %v", err)
 	}
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
@@ -105,7 +105,7 @@ func TestFlushIsNoOpWhenClean(t *testing.T) {
 	}
 
 	c.Next()
-	if err := c.Flush(); err != nil {
+	if err := c.Flush(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	// Second flush with no intervening Next must not rewrite the file.
@@ -114,7 +114,7 @@ func TestFlushIsNoOpWhenClean(t *testing.T) {
 		t.Fatal(err)
 	}
 	time.Sleep(10 * time.Millisecond)
-	if err := c.Flush(); err != nil {
+	if err := c.Flush(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	after, err := os.Stat(path)
@@ -130,7 +130,7 @@ func TestFlushLeavesNoTempFile(t *testing.T) {
 	path := tempPath(t)
 	c, _ := Load(path)
 	c.Next()
-	if err := c.Flush(); err != nil {
+	if err := c.Flush(t.Context()); err != nil {
 		t.Fatal(err)
 	}
 	entries, err := os.ReadDir(filepath.Dir(path))
