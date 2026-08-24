@@ -100,14 +100,21 @@ a:hover {
 	text-decoration-thickness: 2px;
 }
 
-/* The easter egg: any visit number with a 67 in it. The whole page shifts
-   from green to gold and the caption gains a line that rocks between the two
-   syllables. Rendered server-side into the markup — the page still ships no
-   JavaScript. */
+/* Easter eggs: visit numbers containing certain digits get a body class
+   (matched server-side in internal/handlers/index.go) that retargets the
+   accent colour, plus a caption line that rocks between two states. Rendered
+   into the markup rather than with JS — the colophon promises the page ships
+   none. Rules are ordered least to most specific, so a number matching more
+   than one (420 contains both "42" and "420") gets its colour from the last
+   rule that applies. */
 
-body.six-seven {
-	--accent: #ffd166;
-}
+body.six-seven  { --accent: #ffd166; }
+body.nice       { --accent: #ff6b9d; }
+body.the-answer { --accent: #c792ea; }
+body.blaze-it   { --accent: #66ff66; }
+body.leet       { --accent: #00e5ff; }
+body.born-98    { --accent: #ff9f43; }
+body.birthday   { --accent: #ff5e5e; }
 
 .egg {
 	display: inline-block;
@@ -117,10 +124,10 @@ body.six-seven {
 	font-weight: 600;
 	letter-spacing: 0.18em;
 	text-transform: uppercase;
-	animation: six-seven 1.6s ease-in-out infinite;
+	animation: egg-wobble 1.6s ease-in-out infinite;
 }
 
-@keyframes six-seven {
+@keyframes egg-wobble {
 	0%, 100% { transform: rotate(-4deg) translateY(0); }
 	50%      { transform: rotate(4deg) translateY(-2px); }
 }

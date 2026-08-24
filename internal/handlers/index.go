@@ -23,9 +23,18 @@ type indexData struct {
 	// render with a broken image and no error anywhere. The value is built
 	// here from bytes this package produced, so bypassing the sanitiser is
 	// safe; it would not be for anything derived from a request.
-	Image    template.URL
-	Capped   bool
-	SixSeven bool
+	Image     template.URL
+	Capped    bool
+	Eggs      []egg
+	BodyClass string
+}
+
+// egg is one easter egg's rendering: the class it puts on <body> (which the
+// stylesheet uses to retarget --accent) and the caption line it adds under
+// the odometer.
+type egg struct {
+	Class   string
+	Caption string
 }
 
 // HandleIndex counts the visit and renders the page. This is the only route
@@ -53,11 +62,13 @@ func (s *Server) HandleIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	eggs, bodyClass := matchEggs(n)
 	data := indexData{
-		Count:    n,
-		Image:    img,
-		Capped:   n > art.MaxCount,
-		SixSeven: sixSeven(n),
+		Count:     n,
+		Image:     img,
+		Capped:    n > art.MaxCount,
+		Eggs:      eggs,
+		BodyClass: bodyClass,
 	}
 
 	// The count changes on every visit, so the page must never be cached — by
@@ -97,10 +108,37 @@ func imageDataURI(n uint64) (template.URL, error) {
 	return template.URL(uri.String()), nil
 }
 
-// sixSeven reports whether the visit number has a 67 in it, which is the whole
-// qualification for the easter egg. It looks at the digits as written — 167
-// and 6700 count, 607 does not — because the joke is about seeing "67" in the
-// number on the page, not about arithmetic.
-func sixSeven(n uint64) bool {
-	return strings.Contains(strconv.FormatUint(n, 10), "67")
+// eggDefs are the numbers that mean something, in order of least to most
+// specific for anything that nests (42 sits inside 420). Where two defs both
+// match, the stylesheet gives the later one's --accent priority, so the more
+// specific number wins the colour and the less specific one still gets its
+// caption line.
+var eggDefs = []struct {
+	substr, class, caption string
+}{
+	{"67", "six-seven", "six seven"},
+	{"69", "nice", "nice"},
+	{"42", "the-answer", "the answer"},
+	{"420", "blaze-it", "blaze it"},
+	{"1337", "leet", "leet"},
+	{"1998", "born-98", "98 baby"},
+	{"30498", "birthday", "happy birthday"},
+}
+
+// matchEggs reports which easter eggs a visit number triggers, checking the
+// digits as written rather than arithmetic: 167 and 6700 count for 67, 607
+// does not. A number can trigger more than one egg at once — 420 contains
+// both "42" and "420" — so this returns every match, plus the space-joined
+// class list for <body>.
+func matchEggs(n uint64) ([]egg, string) {
+	s := strconv.FormatUint(n, 10)
+	var eggs []egg
+	var classes []string
+	for _, def := range eggDefs {
+		if strings.Contains(s, def.substr) {
+			eggs = append(eggs, egg{Class: def.class, Caption: def.caption})
+			classes = append(classes, def.class)
+		}
+	}
+	return eggs, strings.Join(classes, " ")
 }

@@ -9,7 +9,7 @@
 	<meta name="theme-color" content="#0b0e11">
 	<meta name="description" content="A Raspberry Pi in a house in England, counting visitors and drawing them a picture.">
 </head>
-<body{{if .SixSeven}} class="six-seven"{{end}}>
+<body{{if .BodyClass}} class="{{.BodyClass}}"{{end}}>
 	<main>
 		<h1>hello</h1>
 
@@ -19,7 +19,7 @@
 			<figcaption>
 				you are visitor <strong>#{{.Count}}</strong>
 				{{if .Capped}}<br><span class="note">(the odometer only has six digits — you have outgrown it)</span>{{end}}
-				{{if .SixSeven}}<br><span class="egg">six seven</span>{{end}}
+				{{range .Eggs}}<br><span class="egg">{{.Caption}}</span>{{end}}
 			</figcaption>
 		</figure>
 

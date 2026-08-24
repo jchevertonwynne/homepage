@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -134,42 +135,80 @@ func TestConcurrentVisitsAreAllCounted(t *testing.T) {
 	}
 }
 
-// The easter egg fires on the digits as written, so 167 counts and 607 does
-// not. It is driven by a class on <body> plus a caption line, both rendered
-// server-side — the page promises no JavaScript in its own colophon.
-func TestSixSevenEasterEgg(t *testing.T) {
-	cases := map[uint64]bool{
-		66:   false,
-		67:   true,
-		167:  true,
-		607:  false,
-		670:  true,
-		6700: true,
-		7607: false, // a 7, a 6 and a 0 in the way — the digits must be adjacent
-		7676: true,
+// Each easter egg fires on the digits as written, so 167 counts for 67 and
+// 607 does not. Eggs are driven by a class on <body> plus a caption line,
+// both rendered server-side — the page promises no JavaScript in its own
+// colophon. A number can trigger more than one egg at once, like 420 (which
+// contains both "42" and "420").
+func TestEasterEggs(t *testing.T) {
+	cases := map[uint64][]string{
+		66:    nil,
+		67:    {"six-seven"},
+		167:   {"six-seven"},
+		607:   nil,
+		670:   {"six-seven"},
+		6700:  {"six-seven"},
+		7607:  nil, // a 7, a 6 and a 0 in the way — the digits must be adjacent
+		7676:  {"six-seven"},
+		69:    {"nice"},
+		169:   {"nice"},
+		691:   {"nice"},
+		42:    {"the-answer"},
+		4210:  {"the-answer"}, // has "42" but not "420"
+		420:   {"the-answer", "blaze-it"},
+		4200:  {"the-answer", "blaze-it"},
+		1337:  {"leet"},
+		51337: {"leet"},
+		1998:  {"born-98"},
+		30498: {"birthday"},
 	}
-	for visit, want := range cases {
+	captions := map[string]string{
+		"six-seven":  "six seven",
+		"nice":       "nice",
+		"the-answer": "the answer",
+		"blaze-it":   "blaze it",
+		"leet":       "leet",
+		"born-98":    "98 baby",
+		"birthday":   "happy birthday",
+	}
+	for visit, wantClasses := range cases {
 		mux, _ := newServerAt(t, visit-1)
 		body := get(t, mux, "/").Body.String()
+		bodyTag := body[:strings.Index(body, "<main>")]
 
-		if got := strings.Contains(body, `class="six-seven"`); got != want {
-			t.Errorf("visit #%d: six-seven body class = %v, want %v", visit, got, want)
+		if len(wantClasses) == 0 {
+			if !strings.Contains(bodyTag, "<body>") {
+				t.Errorf("visit #%d: want an unadorned <body>, got %q", visit, bodyTag)
+			}
+			continue
 		}
-		if got := strings.Contains(body, "six seven"); got != want {
-			t.Errorf("visit #%d: caption egg = %v, want %v", visit, got, want)
+		classAttr := bodyTag[strings.Index(bodyTag, `class="`)+len(`class="`):]
+		gotClasses := strings.Fields(classAttr[:strings.Index(classAttr, `"`)])
+		for _, class := range wantClasses {
+			if !slices.Contains(gotClasses, class) {
+				t.Errorf("visit #%d: body classes %v missing %q", visit, gotClasses, class)
+			}
+			if want := captions[class]; !strings.Contains(body, want) {
+				t.Errorf("visit #%d: caption %q missing", visit, want)
+			}
 		}
 	}
 }
 
-// The egg has to be styled to be an egg at all: without these rules the class
-// on <body> does nothing and the caption line is indistinguishable from the
-// text above it.
-func TestSixSevenIsStyled(t *testing.T) {
+// The eggs have to be styled to be eggs at all: without these rules the
+// classes on <body> do nothing and the caption lines are indistinguishable
+// from the text above them.
+func TestEasterEggsAreStyled(t *testing.T) {
 	rec := get(t, newServerMux(t), "/static/style.css")
 	css := rec.Body.String()
-	for _, want := range []string{"body.six-seven", ".egg", "prefers-reduced-motion"} {
-		if !strings.Contains(css, want) {
-			t.Errorf("stylesheet has no %q rule, so the easter egg would not show", want)
+	want := []string{
+		"body.six-seven", "body.nice", "body.the-answer", "body.blaze-it",
+		"body.leet", "body.born-98", "body.birthday",
+		".egg", "prefers-reduced-motion",
+	}
+	for _, w := range want {
+		if !strings.Contains(css, w) {
+			t.Errorf("stylesheet has no %q rule, so an easter egg would not show", w)
 		}
 	}
 }
