@@ -14,6 +14,7 @@ import (
 	"homepage/internal/counter"
 	"homepage/internal/handlers"
 	"homepage/internal/metrics"
+	"homepage/internal/profiling"
 	"homepage/internal/tracing"
 )
 
@@ -28,7 +29,10 @@ func main() {
 	countPath := flag.String("counter", "homepage-count.txt", "path to the visit count file")
 	flushEvery := flag.Duration("flush-every", 5*time.Second, "how often to write the visit count to disk")
 	otelEndpoint := flag.String("otel-endpoint", "", "host:port of an OTLP/gRPC trace collector; tracing is disabled if empty")
+	pprofAddr := flag.String("pprof-addr", ":6060", "listen address for pprof debug endpoints; never expose this outside the cluster")
 	flag.Parse()
+
+	go profiling.ListenAndServe(*pprofAddr)
 
 	shutdownTracing, err := tracing.Init(context.Background(), "homepage", *otelEndpoint)
 	if err != nil {
