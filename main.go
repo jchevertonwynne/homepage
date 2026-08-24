@@ -14,6 +14,7 @@ import (
 	"homepage/internal/counter"
 	"homepage/internal/handlers"
 	"homepage/internal/metrics"
+	"homepage/internal/tracing"
 )
 
 //go:embed templates/*.html
@@ -26,7 +27,13 @@ func main() {
 	addr := flag.String("addr", ":8080", "listen address")
 	countPath := flag.String("counter", "homepage-count.txt", "path to the visit count file")
 	flushEvery := flag.Duration("flush-every", 5*time.Second, "how often to write the visit count to disk")
+	otelEndpoint := flag.String("otel-endpoint", "", "host:port of an OTLP/gRPC trace collector; tracing is disabled if empty")
 	flag.Parse()
+
+	shutdownTracing, err := tracing.Init(context.Background(), "homepage", *otelEndpoint)
+	if err != nil {
+		log.Fatalf("init tracing: %v", err)
+	}
 
 	c, err := counter.Load(*countPath)
 	if err != nil {
@@ -38,7 +45,7 @@ func main() {
 
 	srv := &http.Server{
 		Addr:    *addr,
-		Handler: metrics.Instrument(newMux(c)),
+		Handler: tracing.Middleware("homepage", metrics.Instrument(newMux(c))),
 		// A public endpoint needs these. Without ReadHeaderTimeout a single
 		// client can hold a connection open indefinitely by dribbling out
 		// headers, and enough of those exhaust the server.
@@ -75,6 +82,9 @@ func main() {
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		log.Printf("http shutdown: %v", err)
+	}
+	if err := shutdownTracing(shutdownCtx); err != nil {
+		log.Printf("tracing shutdown: %v", err)
 	}
 
 	// Wait for the final flush before exiting — this is the write that makes
